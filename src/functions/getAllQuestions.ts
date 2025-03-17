@@ -11,7 +11,6 @@ interface GetAllQuestionsRequest {
 interface Option {
   optionId: number;
   optionDescription: string;
-  optionLanguage: string;
 }
 
 interface Question {
@@ -20,9 +19,6 @@ interface Question {
   question_type: string;
   required: boolean;
   question_text: string;
-  questionLanguage: string;
-  formType: string;
-  formId: string;
   options?: Option[];
 }
 
@@ -88,9 +84,6 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
           question_type: row.question_type,
           required: row.required,
           question_text: row.question_text,
-          questionLanguage: row.questionLanguage,
-          formType: row.formType,
-          formId: row.formId,
           options: []
         };
       }
@@ -100,7 +93,6 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         questionsMap[qId].options.push({
           optionId: row.optionId,
           optionDescription: row.optionDescription,
-          optionLanguage: row.optionLanguage
         });
       }
     }
