@@ -2,12 +2,6 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/fu
 import { getPool } from "../../config/db";
 import { createErrorResponse } from "../utils";
 
-interface GetAllQuestionsRequest {
-  username: string;
-  formLanguage: string;
-  formType: string;
-}
-
 interface Option {
   optionId: number;
   optionDescription: string;
@@ -20,14 +14,17 @@ interface Question {
   required: boolean;
   question_text: string;
   options?: Option[];
+  position: number;
 }
 
 export async function getAllQuestions(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  // Parse the request body to get username, formLanguage, and formType
-  const { username, formLanguage, formType } = await req.json() as GetAllQuestionsRequest;
+  // Get parameters from query string
+  const username = req.query.get('username');
+  const formLanguage = req.query.get('formLanguage');
+  const formType = req.query.get('formType');
 
   if (!username || !formLanguage || !formType) {
-    return createErrorResponse(400, "username, formLanguage, and formType are required");
+    return createErrorResponse(400, "username, formLanguage, and formType are required query parameters");
   }
 
   try {
@@ -51,7 +48,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         q.required,
         qt.question_text,
         qo.id AS optionId,
-        qot.option_text AS optionDescription
+        qot.option_text AS optionDescription,
+        fqt.position AS questionPosition
       FROM users u
       JOIN forms f ON u.id = f.user_id
       JOIN form_translations ft ON f.id = ft.form_id
@@ -84,7 +82,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
           question_type: row.question_type,
           required: row.required,
           question_text: row.question_text,
-          options: []
+          options: [],
+          position: row.questionPosition
         };
       }
       
@@ -97,9 +96,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
       }
     }
 
-    // Convert the map to an array of questions
-    const questions: Question[] = Object.values(questionsMap);
-
+    // Convert the map to an array of questions and sort by position
+    const questions: Question[] = Object.values(questionsMap).sort((a, b) => a.position - b.position);
     return {
       status: 200,
       jsonBody: { questions }
@@ -111,7 +109,7 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
 }
 
 app.http("getAllQuestions", {
-  methods: ["POST"],
+  methods: ["GET"],
   authLevel: "anonymous",
   handler: getAllQuestions,
 });
