@@ -17,6 +17,11 @@ interface Question {
   position: number;
 }
 
+interface QuestionsResponse {
+  form_id: string;
+  questions: Question[];
+}
+
 export async function getAllQuestions(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
   // Get parameters from query string
   const username = req.query.get('username');
@@ -49,7 +54,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         qt.question_text,
         qo.id AS optionId,
         qot.option_text AS optionDescription,
-        fqt.position AS questionPosition
+        fqt.position AS questionPosition,
+        f.id AS form_id
       FROM users u
       JOIN forms f ON u.id = f.user_id
       JOIN form_translations ft ON f.id = ft.form_id
@@ -69,6 +75,13 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
       .input("formLanguage", formLanguage)
       .query(query);
     const rows = result.recordset;
+
+    if (rows.length === 0) {
+      return createErrorResponse(404, "No questions found for the specified criteria");
+    }
+
+    // Get the form_id from the first row
+    const form_id = rows[0].form_id;
 
     // Group rows by questionId and aggregate the options
     const questionsMap: { [key: string]: Question } = {};
@@ -98,9 +111,15 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
 
     // Convert the map to an array of questions and sort by position
     const questions: Question[] = Object.values(questionsMap).sort((a, b) => a.position - b.position);
+    
+    const response: QuestionsResponse = {
+      form_id,
+      questions
+    };
+
     return {
       status: 200,
-      jsonBody: { questions }
+      jsonBody: response
     };
   } catch (error) {
     context.log("Error retrieving questions:", error);
