@@ -5,6 +5,7 @@ import { createErrorResponse } from "../utils";
 interface Option {
   optionId: number;
   optionDescription: string;
+  position: number;
 }
 
 interface Question {
@@ -54,6 +55,7 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         qt.question_text,
         qo.id AS optionId,
         qot.option_text AS optionDescription,
+        qo.position AS optionPosition,
         fqt.position AS questionPosition,
         f.id AS form_id
       FROM users u
@@ -66,7 +68,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
       LEFT JOIN question_option_translations qot ON qo.id = qot.option_id
       WHERE u.id = @userId
         AND f.category = @formType
-        AND ft.language = @formLanguage;
+        AND ft.language = @formLanguage
+      ORDER BY fqt.position, qo.position;
     `;
     
     const result = await pool.request()
@@ -105,12 +108,18 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         questionsMap[qId].options.push({
           optionId: row.optionId,
           optionDescription: row.optionDescription,
+          position: row.optionPosition
         });
       }
     }
 
     // Convert the map to an array of questions and sort by position
-    const questions: Question[] = Object.values(questionsMap).sort((a, b) => a.position - b.position);
+    const questions: Question[] = Object.values(questionsMap)
+      .map(question => ({
+        ...question,
+        options: question.options?.sort((a, b) => a.position - b.position) || []
+      }))
+      .sort((a, b) => a.position - b.position);
     
     const response: QuestionsResponse = {
       form_id,
