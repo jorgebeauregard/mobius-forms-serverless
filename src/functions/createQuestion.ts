@@ -117,21 +117,38 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
 
     // 6. Process optional options if provided
     if (options && Array.isArray(options)) {
+      // Get the current max position for options of this question
+      const optionPositionQuery = `
+        SELECT ISNULL(MAX(position), 0) AS maxPos
+        FROM question_options
+        WHERE question_id = @question_id
+      `;
+      const optionPosRequest = transaction.request();
+      const optionPosResult = await optionPosRequest
+        .input("question_id", questionId)
+        .query(optionPositionQuery);
+      let currentPosition = optionPosResult.recordset[0].maxPos;
+
       for (const opt of options) {
         const { description: optionDescription, language: optionLanguage } = opt;
         if (!optionDescription || !optionLanguage) {
           await transaction.rollback();
           return createErrorResponse(400, "Each option must include description and language");
         }
+        
+        // Increment position for each option
+        currentPosition++;
+
         // Insert into question_options to get an option id
         const insertOptionQuery = `
-          INSERT INTO question_options (question_id)
+          INSERT INTO question_options (question_id, position)
           OUTPUT INSERTED.id
-          VALUES (@question_id)
+          VALUES (@question_id, @position)
         `;
         const optionRequest = transaction.request();
         const optionResult = await optionRequest
           .input("question_id", questionId)
+          .input("position", currentPosition)
           .query(insertOptionQuery);
         if (optionResult.recordset.length === 0) {
           await transaction.rollback();
