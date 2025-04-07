@@ -15,6 +15,7 @@ interface QuestionData {
   question_type: string;
   required?: boolean;
   question_text: string;
+  image_urls?: string[];  // Array of image URLs for radio_image type
 }
 
 interface OptionData {
@@ -31,9 +32,14 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
     return createErrorResponse(400, "username, form_type, form_language and question are required")
   }
   
-  const { description, question_type, required = false, question_text } = question;
+  const { description, question_type, required = false, question_text, image_urls } = question;
   if (!description || !question_type || !question_text) {
     return createErrorResponse(400, "question must include description, question_type and question_text");
+  }
+
+  // Validate image_urls if question type is radio_image
+  if (question_type === 'radio_image' && (!image_urls || !Array.isArray(image_urls) || image_urls.length === 0)) {
+    return createErrorResponse(400, "radio_image questions must include image_urls array");
   }
 
   try {
@@ -81,15 +87,16 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
 
     // 4. Insert the new question into the questions table
     const insertQuestionQuery = `
-      INSERT INTO questions (description, question_type, required)
+      INSERT INTO questions (description, question_type, required, image_urls)
       OUTPUT INSERTED.id
-      VALUES (@description, @question_type, @required)
+      VALUES (@description, @question_type, @required, @image_urls)
     `;
     const questionRequest = transaction.request();
     const questionResult = await questionRequest
       .input("description", description)
       .input("question_type", question_type)
       .input("required", required)
+      .input("image_urls", image_urls ? JSON.stringify(image_urls) : null)
       .query(insertQuestionQuery);
     if (questionResult.recordset.length === 0) {
       await transaction.rollback();
