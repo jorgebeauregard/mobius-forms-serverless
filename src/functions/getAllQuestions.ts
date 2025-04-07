@@ -16,6 +16,7 @@ interface Question {
   question_text: string;
   options?: Option[];
   position: number;
+  image_urls?: string[];
 }
 
 interface QuestionsResponse {
@@ -52,11 +53,12 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         q.description,
         q.question_type,
         q.required,
+        q.image_urls,
         qt.question_text,
         qo.id AS optionId,
         qot.option_text AS optionDescription,
         qo.position AS optionPosition,
-        fqt.position AS questionPosition,
+        q.position AS questionPosition,
         f.id AS form_id
       FROM users u
       JOIN forms f ON u.id = f.user_id
@@ -69,7 +71,7 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
       WHERE u.id = @userId
         AND f.category = @formType
         AND ft.language = @formLanguage
-      ORDER BY fqt.position, qo.position;
+      ORDER BY q.position, qo.position;
     `;
     
     const result = await pool.request()
@@ -99,7 +101,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
           required: row.required,
           question_text: row.question_text,
           options: [],
-          position: row.questionPosition
+          position: row.questionPosition,
+          image_urls: row.image_urls ? JSON.parse(row.image_urls) : undefined
         };
       }
       
