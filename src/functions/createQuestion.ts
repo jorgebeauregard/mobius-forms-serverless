@@ -45,8 +45,6 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
   try {
     const pool = await getPool();
 
-    console.log(pool)
-
     // Start a transaction to ensure atomicity
     const transaction = pool.transaction();
     await transaction.begin();
@@ -86,16 +84,32 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
     const formTranslationId = formTransResult.recordset[0].id;
 
     // 4. Insert the new question into the questions table
+    // First, get the current max position for questions in this form
+    const questionPositionQuery = `
+      SELECT ISNULL(MAX(q.position), 0) AS maxPos
+      FROM questions q
+      JOIN question_translations qt ON q.id = qt.question_id
+      JOIN form_question_translations fqt ON qt.id = fqt.question_translation_id
+      WHERE fqt.form_translation_id = @formTranslationId
+    `;
+    const questionPosRequest = transaction.request();
+    const questionPosResult = await questionPosRequest
+      .input("formTranslationId", formTranslationId)
+      .query(questionPositionQuery);
+    const maxQuestionPosition = questionPosResult.recordset[0].maxPos;
+    const questionPosition = maxQuestionPosition + 1;
+
     const insertQuestionQuery = `
-      INSERT INTO questions (description, question_type, required, image_urls)
+      INSERT INTO questions (description, question_type, required, position, image_urls)
       OUTPUT INSERTED.id
-      VALUES (@description, @question_type, @required, @image_urls)
+      VALUES (@description, @question_type, @required, @position, @image_urls)
     `;
     const questionRequest = transaction.request();
     const questionResult = await questionRequest
       .input("description", description)
       .input("question_type", question_type)
       .input("required", required)
+      .input("position", questionPosition)
       .input("image_urls", image_urls ? JSON.stringify(image_urls) : null)
       .query(insertQuestionQuery);
     if (questionResult.recordset.length === 0) {
@@ -177,27 +191,14 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
       }
     }
 
-    // 7. Link the question to the form via form_question_translations.
-    // Determine the next available position for this form translation.
-    const positionQuery = `
-      SELECT ISNULL(MAX(position), 0) AS maxPos
-      FROM form_question_translations
-      WHERE form_translation_id = @formTranslationId
-    `;
-    const posRequest = transaction.request();
-    const posResult = await posRequest.input("formTranslationId", formTranslationId).query(positionQuery);
-    const maxPos = posResult.recordset[0].maxPos;
-    const position = maxPos + 1;
-
     const insertFormQuestionTransQuery = `
-      INSERT INTO form_question_translations (form_translation_id, question_translation_id, position)
-      VALUES (@form_translation_id, @question_translation_id, @position)
+      INSERT INTO form_question_translations (form_translation_id, question_translation_id)
+      VALUES (@form_translation_id, @question_translation_id)
     `;
     const formQuestionTransRequest = transaction.request();
     await formQuestionTransRequest
       .input("form_translation_id", formTranslationId)
       .input("question_translation_id", questionTranslationId)
-      .input("position", position)
       .query(insertFormQuestionTransQuery);
 
     // Commit the transaction if everything succeeded
