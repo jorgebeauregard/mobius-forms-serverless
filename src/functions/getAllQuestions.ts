@@ -17,6 +17,7 @@ interface Question {
   options?: Option[];
   position: number;
   image_urls?: string[];
+  translation_id: string;
 }
 
 interface QuestionsResponse {
@@ -59,7 +60,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
         qot.option_text AS optionDescription,
         qo.position AS optionPosition,
         q.position AS questionPosition,
-        f.id AS form_id
+        f.id AS form_id,
+        qt.id AS question_translation_id
       FROM users u
       JOIN forms f ON u.id = f.user_id
       JOIN form_translations ft ON f.id = ft.form_id
@@ -67,7 +69,7 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
       JOIN question_translations qt ON fqt.question_translation_id = qt.id
       JOIN questions q ON qt.question_id = q.id
       LEFT JOIN question_options qo ON q.id = qo.question_id
-      LEFT JOIN question_option_translations qot ON qo.id = qot.option_id
+      LEFT JOIN question_option_translations qot ON qo.id = qot.option_id AND qot.language = @formLanguage
       WHERE u.id = @userId
         AND f.category = @formType
         AND ft.language = @formLanguage
@@ -102,7 +104,8 @@ export async function getAllQuestions(req: HttpRequest, context: InvocationConte
           question_text: row.question_text,
           options: [],
           position: row.questionPosition,
-          image_urls: row.image_urls ? JSON.parse(row.image_urls) : undefined
+          image_urls: row.image_urls ? JSON.parse(row.image_urls) : undefined,
+          translation_id: row.question_translation_id
         };
       }
       
