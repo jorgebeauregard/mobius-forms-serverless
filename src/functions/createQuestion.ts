@@ -21,6 +21,7 @@ interface QuestionData {
 interface OptionData {
   description: string;
   language: string;
+  option_type?: string; // 'standard' or 'custom_input', defaults to 'standard'
 }
 
 export async function createQuestion(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
@@ -151,10 +152,16 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
       let currentPosition = optionPosResult.recordset[0].maxPos;
 
       for (const opt of options) {
-        const { description: optionDescription, language: optionLanguage } = opt;
+        const { description: optionDescription, language: optionLanguage, option_type = 'standard' } = opt;
         if (!optionDescription || !optionLanguage) {
           await transaction.rollback();
           return createErrorResponse(400, "Each option must include description and language");
+        }
+        
+        // Validate option_type
+        if (option_type !== 'standard' && option_type !== 'custom_input') {
+          await transaction.rollback();
+          return createErrorResponse(400, "option_type must be either 'standard' or 'custom_input'");
         }
         
         // Increment position for each option
@@ -162,14 +169,15 @@ export async function createQuestion(req: HttpRequest, context: InvocationContex
 
         // Insert into question_options to get an option id
         const insertOptionQuery = `
-          INSERT INTO question_options (question_id, position)
+          INSERT INTO question_options (question_id, position, option_type)
           OUTPUT INSERTED.id
-          VALUES (@question_id, @position)
+          VALUES (@question_id, @position, @option_type)
         `;
         const optionRequest = transaction.request();
         const optionResult = await optionRequest
           .input("question_id", questionId)
           .input("position", currentPosition)
+          .input("option_type", option_type)
           .query(insertOptionQuery);
         if (optionResult.recordset.length === 0) {
           await transaction.rollback();
